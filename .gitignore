@@ -1,0 +1,11 @@
+# Personal data — the app/server create this locally; never commit it
+checkpoint-data.json
+checkpoint-data.json.tmp
+
+# Machine-specific launcher shortcut (paths differ per computer)
+Checkpoint Widget.lnk
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
