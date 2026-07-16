@@ -1,0 +1,588 @@
+/* ---------- Theme ---------- */
+
+:root {
+  --bg: #131834;
+  --surface: #1c2244;
+  --surface-2: #252c52;
+  --border: #303866;
+  --text: #eef0ff;
+  --text-dim: #9aa2cf;
+  --accent: #3fe0c5;
+  --accent-soft: rgba(63, 224, 197, 0.15);
+  --success: #34c98e;
+  --danger: #e5645f;
+  --warn: #e8a33d;
+  --ink: #10142c; /* dark text used on bright accent/tile backgrounds */
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --border: #d9dde3;
+    --text: #1c2128;
+    --text-dim: #5c6470;
+    --accent: #0fb49b;
+    --accent-soft: rgba(15, 180, 155, 0.12);
+  }
+}
+
+/* ---------- Base ---------- */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* The hidden attribute must always win, even over display:flex rules —
+   without this, elements like the sync banner can never be hidden. */
+[hidden] { display: none !important; }
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header h1 { font-size: 2.1rem; letter-spacing: -0.02em; }
+.subtitle { color: var(--text-dim); font-size: 1.05rem; }
+
+.clock {
+  font-size: 2.4rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.3rem;
+  margin-bottom: 1.25rem;
+}
+
+.tab {
+  flex: 1;
+  min-width: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.45rem 0.15rem;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-icon { font-size: 1.15rem; line-height: 1.2; }
+
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--accent-soft); color: var(--accent); }
+
+/* Bottom tab bar mode (Settings → Tab bar position → Bottom) */
+body.tabs-bottom .tabs {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, calc(100vw - 1.5rem));
+  margin-bottom: 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+
+body.tabs-bottom .app { padding-bottom: 7.5rem; }
+
+/* ---------- Sync reconnect banner ---------- */
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+}
+
+/* ---------- Progress card ---------- */
+
+.progress-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-bottom: 0.55rem;
+}
+
+.progress-text .period { color: var(--text-dim); }
+
+.progress-track {
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+/* ---------- Add forms ---------- */
+
+.add-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.add-form input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.add-form input[type="text"]:focus,
+.add-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.add-form select {
+  padding: 0.6rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-primary {
+  padding: 0.6rem 1.1rem;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.btn-primary:hover { filter: brightness(1.12); }
+
+/* ---------- Filter chips ---------- */
+
+.filters { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.chip {
+  padding: 0.32rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chip:hover { color: var(--text); }
+.chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Item lists ---------- */
+
+.item-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* Recurring tasks render as colorful tiles in a grid that wraps
+   onto new rows as it fills the width (backlog stays vertical). */
+#task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.8rem;
+}
+
+.tile {
+  position: relative;
+  border-radius: 22px;
+  color: var(--ink);
+  transition: transform 0.12s, opacity 0.2s;
+}
+
+.tile:hover { transform: translateY(-2px); }
+.tile.done { opacity: 0.55; }
+.tile.done .tile-title { text-decoration: line-through; }
+
+.tile-lavender { background: #b9a7f2; }
+.tile-salmon   { background: #ff9d94; }
+.tile-yellow   { background: #ffd166; }
+.tile-orange   { background: #ffb473; }
+.tile-green    { background: #86e0a5; }
+.tile-teal     { background: #7bdcd0; }
+
+.tile-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  min-height: 132px;
+  padding: 0.85rem;
+  background: none;
+  border: none;
+  border-radius: 22px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile-check {
+  width: 34px;
+  height: 34px;
+  margin-bottom: auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+
+.tile.done .tile-check { background: var(--ink); color: #fff; }
+
+.tile-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.tile-sub { font-size: 0.72rem; font-weight: 600; opacity: 0.75; }
+
+.tile .btn-delete {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  color: rgba(16, 20, 44, 0.55);
+}
+
+.tile .btn-delete:hover { background: rgba(255, 255, 255, 0.45); color: var(--danger); }
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  transition: opacity 0.2s;
+}
+
+.item.done { opacity: 0.55; }
+.item.done .item-title { text-decoration: line-through; }
+
+.item-title {
+  font-size: 0.97rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Backlog items ---------- */
+
+.backlog-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.type-badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  padding: 0.12rem 0.5rem;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.status-pill {
+  flex-shrink: 0;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.status-pill.status-inprogress { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.status-pill.status-done { color: var(--success); border-color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.status-pill:hover { filter: brightness(1.15); }
+
+/* ---------- Delete button ---------- */
+
+.btn-delete {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-delete:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+
+/* ---------- Settings ---------- */
+
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.4rem 1rem;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0;
+}
+
+.setting-row + .setting-row { border-top: 1px solid var(--border); }
+
+.setting-name { display: block; font-weight: 600; font-size: 0.95rem; }
+.setting-desc { display: block; color: var(--text-dim); font-size: 0.8rem; }
+
+.segmented {
+  display: flex;
+  gap: 0.2rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.2rem;
+}
+
+.seg {
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.seg:hover { color: var(--text); }
+.seg.active { background: var(--accent); color: var(--ink); }
+
+.bg-controls { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+.setting-select {
+  flex-shrink: 0;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.setting-select:focus { outline: none; border-color: var(--accent); }
+
+.custom-tabs-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+#custom-tab-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.custom-tab-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.btn-secondary {
+  padding: 0.4rem 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Custom background mode ----------
+   The image covers the window; surfaces (already translucent via the
+   theme variables set from the image) get a frosted-glass blur so
+   content stays clearly readable over any photo. */
+
+#bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  display: none;
+}
+
+body.custom-bg #bg-layer { display: block; }
+
+/* Unsharp-mask convolution (defined as an SVG filter in index.html).
+   Scale slightly to hide edge artifacts from the kernel at the borders. */
+body.custom-bg.bg-sharpen #bg-layer {
+  filter: url(#bg-sharpen);
+  transform: scale(1.01);
+}
+
+body.custom-bg .tabs,
+body.custom-bg .progress-card,
+body.custom-bg .item,
+body.custom-bg .settings-card,
+body.custom-bg .add-form input[type="text"],
+body.custom-bg .add-form select,
+body.custom-bg .chip {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.custom-bg .app-header h1,
+body.custom-bg .subtitle,
+body.custom-bg .clock,
+body.custom-bg .empty-state,
+body.custom-bg .app-footer {
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.65);
+}
+
+/* ---------- Empty state & footer ---------- */
+
+.empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 2rem 1rem;
+}
+
+.app-footer {
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* ---------- Widget mode (?widget=1) ---------- */
+
+body.widget .app { max-width: 100%; padding: 0.75rem 0.75rem 1.25rem; }
+body.widget .app-header { margin-bottom: 0.6rem; }
+body.widget .app-header h1 { font-size: 1.25rem; }
+body.widget .subtitle { font-size: 0.75rem; }
+body.widget .clock { font-size: 1.35rem; }
+body.widget .tabs { padding: 0.2rem; margin-bottom: 0.75rem; }
+body.widget .tab { padding: 0.3rem 0.1rem; min-width: 44px; }
+body.widget .tab span:not(.tab-icon) { display: none; }
+body.widget .tab-icon { font-size: 1.05rem; }
+body.widget .progress-card { padding: 0.6rem 0.75rem; margin-bottom: 0.6rem; }
+body.widget .add-form { margin-bottom: 0.6rem; }
+body.widget #task-list { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 0.5rem; }
+body.widget .tile-main { min-height: 92px; padding: 0.6rem; }
+body.widget .tile-check { width: 26px; height: 26px; }
+body.widget .tile-title { font-size: 0.82rem; }
+body.widget .tile-sub { font-size: 0.64rem; }
+body.widget .app-footer { display: none; }
+body.widget.tabs-bottom .app { padding-bottom: 5.5rem; }
+body.widget.tabs-bottom .tabs { bottom: 0.5rem; }
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 480px) {
+  .add-form { flex-wrap: wrap; }
+  .add-form input[type="text"] { flex-basis: 100%; }
+  .add-form select { flex: 1; }
+}
