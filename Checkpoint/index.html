@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkpoint</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✅</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#131834">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Custom background renders on its own layer so a sharpening
+       filter can be applied to the image without touching the UI -->
+  <div id="bg-layer" aria-hidden="true"></div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="bg-sharpen">
+      <feConvolveMatrix order="3" preserveAlpha="true"
+        kernelMatrix="0 -0.6 0 -0.6 3.4 -0.6 0 -0.6 0"/>
+    </filter>
+  </svg>
+
+  <div class="app">
+    <header class="app-header">
+      <div>
+        <h1>Checkpoint</h1>
+        <p id="today-label" class="subtitle"></p>
+      </div>
+    </header>
+
+    <div id="sync-banner" class="sync-banner" hidden>
+      <span id="sync-banner-text">Sync file paused — the browser asks once per session. Click Reconnect, then Allow.</span>
+      <span class="banner-actions">
+        <button type="button" class="btn-secondary" id="sync-reconnect">Reconnect</button>
+        <button type="button" class="btn-delete" id="sync-dismiss" title="Hide this for the current session">✕</button>
+      </span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="daily" title="Daily"><span class="tab-icon">☀️</span><span>Daily</span></button>
+      <button class="tab" data-tab="weekly" title="Weekly"><span class="tab-icon">🗓️</span><span>Weekly</span></button>
+      <button class="tab" data-tab="monthly" title="Monthly"><span class="tab-icon">📆</span><span>Monthly</span></button>
+      <button class="tab" data-tab="backlog" title="Backlog"><span class="tab-icon">🍿</span><span>Backlog</span></button>
+      <button class="tab" data-tab="settings" title="Settings"><span class="tab-icon">⚙️</span><span>Settings</span></button>
+    </nav>
+
+    <main>
+      <!-- Recurring tasks panel (daily / weekly / monthly) -->
+      <section id="tasks-panel">
+        <div class="progress-card">
+          <div class="progress-text">
+            <span id="progress-label">0 of 0 done</span>
+            <span id="period-label" class="period"></span>
+          </div>
+          <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
+        </div>
+
+        <form id="task-form" class="add-form" autocomplete="off">
+          <input type="text" id="task-input" placeholder="Add a task…" maxlength="120" required>
+          <select id="task-repeat" title="Does this task repeat?">
+            <option value="repeat" id="task-repeat-option">🔁 Repeats daily</option>
+            <option value="once">📌 One-time</option>
+          </select>
+          <button type="submit" class="btn-primary">Add</button>
+        </form>
+
+        <ul id="task-list" class="item-list"></ul>
+        <p id="tasks-empty" class="empty-state" hidden></p>
+      </section>
+
+      <!-- Media backlog panel -->
+      <section id="backlog-panel" hidden>
+        <form id="backlog-form" class="add-form" autocomplete="off">
+          <input type="text" id="backlog-input" placeholder="Add a show, movie, game, or album…" maxlength="120" required>
+          <select id="backlog-type">
+            <option value="tv">📺 TV Show</option>
+            <option value="movie">🎬 Movie</option>
+            <option value="game">🎮 Game</option>
+            <option value="music">🎵 Music</option>
+          </select>
+          <button type="submit" class="btn-primary">Add</button>
+        </form>
+
+        <div class="filters">
+          <div class="chip-row" id="type-filters">
+            <button class="chip active" data-type="all">All</button>
+            <button class="chip" data-type="tv">📺 TV</button>
+            <button class="chip" data-type="movie">🎬 Movies</button>
+            <button class="chip" data-type="game">🎮 Games</button>
+            <button class="chip" data-type="music">🎵 Music</button>
+          </div>
+          <div class="chip-row" id="status-filters">
+            <button class="chip active" data-status="all">Any status</button>
+            <button class="chip" data-status="backlog">Backlog</button>
+            <button class="chip" data-status="inprogress">In progress</button>
+            <button class="chip" data-status="done">Done</button>
+          </div>
+        </div>
+
+        <ul id="backlog-list" class="item-list"></ul>
+        <p id="backlog-empty" class="empty-state" hidden></p>
+      </section>
+
+      <!-- Settings panel -->
+      <section id="settings-panel" hidden>
+        <div class="settings-card">
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Tab bar position</span>
+              <span class="setting-desc">Show the navigation bar at the top or bottom</span>
+            </div>
+            <div class="segmented" id="tabpos-toggle">
+              <button type="button" class="seg" data-pos="top">Top</button>
+              <button type="button" class="seg" data-pos="bottom">Bottom</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Custom background</span>
+              <span class="setting-desc">Pick an image — the app recolors itself to match it</span>
+            </div>
+            <div class="bg-controls">
+              <input type="file" id="bg-file" accept="image/*" hidden>
+              <button type="button" class="btn-secondary" id="bg-choose">Choose image</button>
+              <button type="button" class="btn-secondary" id="bg-remove" hidden>Remove</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Sharpen background</span>
+              <span class="setting-desc">Crisps up soft or upscaled background images</span>
+            </div>
+            <div class="segmented" id="sharpen-toggle">
+              <button type="button" class="seg" data-sharpen="off">Off</button>
+              <button type="button" class="seg" data-sharpen="on">On</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Custom tabs</span>
+              <span class="setting-desc">Add extra checklist tabs for anything else you come up with</span>
+            </div>
+            <div class="custom-tabs-controls">
+              <ul id="custom-tab-list" hidden></ul>
+              <button type="button" class="btn-secondary" id="add-tab">+ Add tab</button>
+            </div>
+          </div>
+          <div class="setting-row" id="sync-row">
+            <div class="setting-info">
+              <span class="setting-name">Sync file</span>
+              <span class="setting-desc" id="sync-status">Share data across browsers and devices — keep the file in OneDrive</span>
+            </div>
+            <div class="bg-controls">
+              <button type="button" class="btn-secondary" id="sync-connect">Connect existing</button>
+              <button type="button" class="btn-secondary" id="sync-create">Create new</button>
+              <button type="button" class="btn-secondary" id="sync-disconnect" hidden>Disconnect</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Backup</span>
+              <span class="setting-desc">Export or import all data as a JSON file</span>
+            </div>
+            <div class="bg-controls">
+              <input type="file" id="import-file" accept=".json,application/json" hidden>
+              <button type="button" class="btn-secondary" id="export-data">Export</button>
+              <button type="button" class="btn-secondary" id="import-data">Import</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Widget mode</span>
+              <span class="setting-desc">Compact floating window — run widget.cmd instead for an always-on-top desktop widget</span>
+            </div>
+            <button type="button" class="btn-secondary" id="open-widget">Open widget</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span id="stats-label"></span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
