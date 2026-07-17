@@ -326,9 +326,29 @@ function renderTasks() {
   clearBtn.hidden = !clearable.length;
   clearBtn.textContent = `✕ Clear ${clearable.length} completed one-time task${clearable.length === 1 ? '' : 's'}`;
 
+  const todayKey = fmtDate(now);
+  const soonKey = fmtDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2));
+
   for (const task of visible) {
     const isDone = doneIn(task);
-    const li = el('li', `tile ${tileColor(task.id)}` + (isDone ? ' done' : ''));
+    let subText;
+    let dueClass = '';
+    if (task.once) {
+      if (isDone) {
+        subText = '📌 done';
+      } else if (task.due) {
+        subText = `📌 due ${dueLabel(task.due)}`;
+        if (task.due < todayKey) dueClass = ' overdue';
+        else if (task.due <= soonKey) dueClass = ' due-soon';
+      } else {
+        subText = '📌 one-time';
+      }
+    } else {
+      const streak = computeStreak(task, now);
+      subText = (streak >= 2 ? `🔥 ${streak} · ` : '') + RECURRENCE_LABEL[task.recurrence];
+    }
+
+    const li = el('li', `tile ${tileColor(task.id)}` + (isDone ? ' done' : '') + dueClass);
 
     const main = el('button', 'tile-main');
     main.type = 'button';
@@ -336,13 +356,6 @@ function renderTasks() {
     main.addEventListener('click', () => toggleTask(task));
 
     const title = el('span', 'tile-title', task.title);
-    let subText;
-    if (task.once) {
-      subText = isDone ? '📌 done' : '📌 one-time';
-    } else {
-      const streak = computeStreak(task, now);
-      subText = (streak >= 2 ? `🔥 ${streak} · ` : '') + RECURRENCE_LABEL[task.recurrence];
-    }
     const sub = el('span', 'tile-sub', subText);
     main.append(el('span', 'tile-check', isDone ? '✓' : ''), title, sub);
     li.append(main);
@@ -363,6 +376,11 @@ function renderTasks() {
   }
 
   renderStats();
+}
+
+function dueLabel(d) {
+  const [, m, day] = d.split('-').map(Number);
+  return `${MONTHS[m - 1].slice(0, 3)} ${day}`;
 }
 
 async function renameTask(task) {
@@ -470,6 +488,20 @@ function renderBacklog() {
     const info = el('div', 'backlog-info');
     info.append(el('span', 'item-title', item.title));
     info.append(el('span', `type-badge type-${item.type}`, TYPE_LABEL[item.type]));
+    if (item.status === 'done') {
+      const rate = el('button', 'mini-badge', item.rating ? '⭐'.repeat(item.rating) : '☆ rate');
+      rate.type = 'button';
+      rate.title = 'Rate this';
+      rate.addEventListener('click', () => rateItem(item));
+      info.append(rate);
+    }
+    if (item.status === 'inprogress') {
+      const prog = el('button', 'mini-badge', item.progress ? `📍 ${item.progress}` : '📍 progress');
+      prog.type = 'button';
+      prog.title = 'Track where you are (episode, %, chapter…)';
+      prog.addEventListener('click', () => setProgress(item));
+      info.append(prog);
+    }
     li.append(info);
 
     const statusBtn = el('button', `status-pill status-${item.status}`, STATUS_LABEL[item.status]);
@@ -525,6 +557,30 @@ function pickRandomBacklog() {
 async function cycleStatus(item) {
   item.status = STATUS_NEXT[item.status];
   item.finishedAt = item.status === 'done' ? Date.now() : null;
+  if (item.status === 'done') {
+    const raw = prompt(`Nice! Rate "${item.title}" 1–5 (optional):`);
+    if (raw !== null) {
+      const r = parseInt(raw.trim(), 10);
+      if (r >= 1 && r <= 5) item.rating = r;
+    }
+  }
+  await idbPut('backlog', item);
+  renderBacklog();
+}
+
+async function rateItem(item) {
+  const raw = prompt(`Rate "${item.title}" 1–5 (empty to clear):`, item.rating || '');
+  if (raw === null) return;
+  const r = parseInt(raw.trim(), 10);
+  item.rating = (r >= 1 && r <= 5) ? r : null;
+  await idbPut('backlog', item);
+  renderBacklog();
+}
+
+async function setProgress(item) {
+  const raw = prompt('Where are you? (e.g. S2E5, 40%, chapter 3 — empty to clear)', item.progress || '');
+  if (raw === null) return;
+  item.progress = raw.trim().slice(0, 24) || null;
   await idbPut('backlog', item);
   renderBacklog();
 }
@@ -611,14 +667,19 @@ function renderStatsPanel() {
     saveSettings();
   }
 
+  const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
+  const finishedThisYear = backlog.filter((b) => b.status === 'done' && b.finishedAt && b.finishedAt >= yearStart).length;
+
   grid.append(
     statCard(settings.stats.allTime || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
     statCard(recorded, 'Completions on current tasks'),
     statCard(`${doneNow}/${tasks.length}`, 'Checked off right now'),
     statCard(bestStreak, 'Best active streak', bestTask ? `🔥 ${bestTask.title}` : 'no streaks yet'),
     statCard(settings.stats.bestEver || 0, 'Longest streak ever', settings.stats.bestEverTitle ? `🔥 ${settings.stats.bestEverTitle}` : 'no streaks yet'),
-    statCard(`${finished}/${backlog.length}`, 'Backlog finished'),
+    statCard(`${finished}/${backlog.length}`, 'Backlog finished', `${finishedThisYear} this year`),
   );
+
+  renderHeatmap();
 
   const breakdown = $('#stats-breakdown');
   breakdown.replaceChildren();
@@ -638,6 +699,45 @@ function renderStatsPanel() {
     row.append(info, el('span', 'stat-row-value', String(count)));
     breakdown.append(row);
   }
+}
+
+/* GitHub-style activity heatmap: one cell per day, darker = more
+   completions. Dates come from each task's recorded period keys, so
+   history accumulated before this feature shipped still shows up. */
+function renderHeatmap() {
+  const wrap = $('#heatmap');
+  wrap.replaceChildren();
+
+  const counts = {};
+  for (const t of tasks) {
+    for (const k of Object.keys(t.done || {})) {
+      let dateKey = null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k)) dateKey = k;            // daily
+      else if (/^W\d{4}-\d{2}-\d{2}$/.test(k)) dateKey = k.slice(1); // weekly -> its Monday
+      else if (/^\d{4}-\d{2}$/.test(k)) dateKey = k + '-01';     // monthly -> the 1st
+      if (dateKey) counts[dateKey] = (counts[dateKey] || 0) + 1;
+    }
+  }
+
+  const now = new Date();
+  const todayKey = fmtDate(now);
+  const start = mondayOf(now);
+  start.setDate(start.getDate() - 7 * 25); // 26 week-columns incl. current
+
+  for (const d = new Date(start); ; d.setDate(d.getDate() + 1)) {
+    const key = fmtDate(d);
+    if (key > todayKey) break;
+    const c = counts[key] || 0;
+    const level = c === 0 ? 0 : c === 1 ? 1 : c === 2 ? 2 : c <= 4 ? 3 : 4;
+    const cell = el('span', `hm-cell hm-${level}`);
+    cell.title = `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}: ${c} completion${c === 1 ? '' : 's'}`;
+    wrap.append(cell);
+  }
+}
+
+/* The optional due-date field only applies to one-time tasks */
+function updateDueVisibility() {
+  $('#task-due').hidden = $('#task-repeat').value !== 'once';
 }
 
 /* Built-in tabs offer "repeats <tab>" or one-time; custom tabs let
@@ -660,6 +760,7 @@ function populateRepeatSelect(tab) {
     opt('repeat', `🔁 Repeats ${tab}`);
     opt('once', '📌 One-time');
   }
+  updateDueVisibility();
 }
 
 /* ---------- Custom tab management ---------- */
@@ -1109,12 +1210,15 @@ async function init() {
     const task = {
       id: uid(), title, tab: activeTab,
       recurrence: custom ? (once ? 'daily' : val) : activeTab,
-      once, done: {}, createdAt: Date.now(),
+      once, due: (once && $('#task-due').value) || null,
+      done: {}, createdAt: Date.now(),
     };
     tasks.push(task);
     await idbPut('tasks', task);
     input.value = '';
+    $('#task-due').value = '';
     $('#task-repeat').value = custom ? 'once' : 'repeat';
+    updateDueVisibility();
     renderTasks();
   });
 
@@ -1132,6 +1236,8 @@ async function init() {
     input.value = '';
     renderBacklog();
   });
+
+  $('#task-repeat').addEventListener('change', updateDueVisibility);
 
   wireChipRow('#type-filters', 'type', (v) => { typeFilter = v; renderBacklog(); });
   wireChipRow('#status-filters', 'status', (v) => { statusFilter = v; renderBacklog(); });
