@@ -733,6 +733,122 @@ body.custom-bg .app-footer {
   font-size: 0.8rem;
 }
 
+/* ---------- Modal prompt ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 24, 0.6);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 1001;
+  padding: 1rem;
+}
+
+.modal-card {
+  width: min(92vw, 380px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.modal-title { font-size: 1.02rem; font-weight: 700; }
+
+.modal-input {
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.modal-input:focus { outline: none; border-color: var(--accent); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+.modal-stars { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.modal-star {
+  padding: 0.45rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: left;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.modal-star:hover { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface-2)); }
+
+.modal-colors { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+
+.modal-swatch {
+  width: 34px;
+  height: 34px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--ink);
+  transition: transform 0.12s;
+}
+
+.modal-swatch:hover { transform: scale(1.1); }
+.modal-swatch.selected { border-color: var(--text); }
+.swatch-auto { background: var(--surface-2); color: var(--text-dim); border: 2px dashed var(--border); }
+.swatch-auto.selected { border-style: solid; border-color: var(--text); }
+
+/* ---------- Day picker (weekday scheduling) ---------- */
+
+.day-picker { margin: -0.4rem 0 1rem; }
+
+.day-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- Rest-day tiles ---------- */
+
+.tile.rest { opacity: 0.4; }
+.tile.rest:hover { transform: none; }
+.tile-main:disabled { cursor: default; }
+
+/* ---------- Backlog search & sort ---------- */
+
+.backlog-tools {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.backlog-tools input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.backlog-tools input[type="search"]:focus { outline: none; border-color: var(--accent); }
+
+/* ---------- Streak freeze buy button ---------- */
+
+.buy-freeze { margin-top: 0.55rem; font-size: 0.78rem; padding: 0.3rem 0.7rem; }
+.buy-freeze:disabled { opacity: 0.45; cursor: default; }
+
 /* ---------- Toast (undo bar / notices) ---------- */
 
 .toast {
