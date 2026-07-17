@@ -42,6 +42,7 @@
       <button class="tab" data-tab="weekly" title="Weekly"><span class="tab-icon">🗓️</span><span>Weekly</span></button>
       <button class="tab" data-tab="monthly" title="Monthly"><span class="tab-icon">📆</span><span>Monthly</span></button>
       <button class="tab" data-tab="backlog" title="Backlog"><span class="tab-icon">🍿</span><span>Backlog</span></button>
+      <button class="tab" data-tab="stats" title="Stats"><span class="tab-icon">📊</span><span>Stats</span></button>
       <button class="tab" data-tab="settings" title="Settings"><span class="tab-icon">⚙️</span><span>Settings</span></button>
     </nav>
 
@@ -102,6 +103,13 @@
 
         <ul id="backlog-list" class="item-list"></ul>
         <p id="backlog-empty" class="empty-state" hidden></p>
+      </section>
+
+      <!-- Stats panel -->
+      <section id="stats-panel" hidden>
+        <div class="stats-grid" id="stats-grid"></div>
+        <p class="stats-caption">Completions recorded per tab</p>
+        <div class="settings-card" id="stats-breakdown"></div>
       </section>
 
       <!-- Settings panel -->
