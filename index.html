@@ -54,6 +54,7 @@
             <span id="period-label" class="period"></span>
           </div>
           <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
+          <button type="button" id="clear-done-tasks" class="btn-clear" hidden>Clear completed one-time tasks</button>
         </div>
 
         <form id="task-form" class="add-form" autocomplete="off">
@@ -96,6 +97,7 @@
             <button class="chip" data-status="inprogress">In progress</button>
             <button class="chip" data-status="done">Done</button>
           </div>
+          <button type="button" id="clear-done-backlog" class="btn-clear" hidden>Clear finished items</button>
         </div>
 
         <ul id="backlog-list" class="item-list"></ul>
