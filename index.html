@@ -67,6 +67,15 @@
           <input type="date" id="task-due" title="Due date (optional)" hidden>
           <button type="submit" class="btn-primary">Add</button>
         </form>
+        <div id="day-picker" class="chip-row day-picker" hidden>
+          <button type="button" class="chip day-chip active" data-day="1">Mon</button>
+          <button type="button" class="chip day-chip active" data-day="2">Tue</button>
+          <button type="button" class="chip day-chip active" data-day="3">Wed</button>
+          <button type="button" class="chip day-chip active" data-day="4">Thu</button>
+          <button type="button" class="chip day-chip active" data-day="5">Fri</button>
+          <button type="button" class="chip day-chip active" data-day="6">Sat</button>
+          <button type="button" class="chip day-chip active" data-day="0">Sun</button>
+        </div>
 
         <ul id="task-list" class="item-list"></ul>
         <p id="tasks-empty" class="empty-state" hidden></p>
@@ -85,6 +94,15 @@
           <button type="submit" class="btn-primary">Add</button>
         </form>
 
+        <div class="backlog-tools">
+          <input type="search" id="backlog-search" placeholder="Search your backlog…">
+          <select id="backlog-sort" class="setting-select" title="Sort by">
+            <option value="status">Status</option>
+            <option value="added">Recently added</option>
+            <option value="title">Title A–Z</option>
+            <option value="rating">Rating</option>
+          </select>
+        </div>
         <div class="filters">
           <div class="chip-row" id="type-filters">
             <button class="chip active" data-type="all">All</button>
@@ -195,6 +213,16 @@
               <button type="button" class="btn-secondary" id="sync-connect">Connect existing</button>
               <button type="button" class="btn-secondary" id="sync-create">Create new</button>
               <button type="button" class="btn-secondary" id="sync-disconnect" hidden>Disconnect</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Snapshots</span>
+              <span class="setting-desc">Automatic hourly backups kept in this browser — restore if something goes wrong</span>
+            </div>
+            <div class="bg-controls">
+              <select id="backup-select" class="setting-select"></select>
+              <button type="button" class="btn-secondary" id="backup-restore">Restore</button>
             </div>
           </div>
           <div class="setting-row">
