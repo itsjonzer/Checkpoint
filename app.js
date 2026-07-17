@@ -347,6 +347,12 @@ function renderTasks() {
     main.append(el('span', 'tile-check', isDone ? '✓' : ''), title, sub);
     li.append(main);
 
+    const editBtn = el('button', 'btn-edit', '✏️');
+    editBtn.type = 'button';
+    editBtn.title = 'Rename task';
+    editBtn.addEventListener('click', () => renameTask(task));
+    li.append(editBtn);
+
     const delBtn = el('button', 'btn-delete', '✕');
     delBtn.type = 'button';
     delBtn.title = 'Delete task';
@@ -359,8 +365,17 @@ function renderTasks() {
   renderStats();
 }
 
+async function renameTask(task) {
+  const name = (prompt('Rename task:', task.title) || '').trim().slice(0, 120);
+  if (!name || name === task.title) return;
+  task.title = name;
+  await idbPut('tasks', task);
+  renderTasks();
+}
+
 async function toggleTask(task) {
-  const key = task.once ? 'once' : periodKey(task.recurrence, new Date());
+  const now = new Date();
+  const key = task.once ? 'once' : periodKey(task.recurrence, now);
   // lifetime completion counter — survives task deletion and bulk-clear;
   // unchecking decrements so check/uncheck cycles don't inflate it
   if (!settings.stats) settings.stats = { allTime: 0 };
@@ -370,10 +385,42 @@ async function toggleTask(task) {
   } else {
     task.done[key] = true;
     settings.stats.allTime = (settings.stats.allTime || 0) + 1;
+    // record-keeping for longest streak ever achieved
+    if (!task.once) {
+      const s = computeStreak(task, now);
+      if (s > (settings.stats.bestEver || 0)) {
+        settings.stats.bestEver = s;
+        settings.stats.bestEverTitle = task.title;
+      }
+    }
+    // completing the last remaining task on this tab earns confetti
+    const tabTasks = tasks.filter((t) => taskTab(t) === activeTab);
+    if (tabTasks.length && tabTasks.every((t) => t.done[t.once ? 'once' : periodKey(t.recurrence, now)])) {
+      confetti();
+    }
   }
   saveSettings();
   await idbPut('tasks', task);
   renderTasks();
+}
+
+/* Full-tab completion celebration: ~80 falling pieces, then cleanup */
+function confetti() {
+  const container = el('div', 'confetti');
+  const colors = ['#b9a7f2', '#ff9d94', '#ffd166', '#ffb473', '#86e0a5', '#7bdcd0'];
+  for (let i = 0; i < 80; i++) {
+    const p = el('span', 'confetti-piece');
+    p.style.left = (Math.random() * 100) + 'vw';
+    p.style.background = colors[i % colors.length];
+    p.style.animationDelay = (Math.random() * 0.6) + 's';
+    p.style.animationDuration = (2 + Math.random() * 1.5) + 's';
+    const size = 6 + Math.random() * 6;
+    p.style.width = size + 'px';
+    p.style.height = (size * 0.5) + 'px';
+    container.append(p);
+  }
+  document.body.append(container);
+  setTimeout(() => container.remove(), 4500);
 }
 
 async function deleteTask(task) {
@@ -418,6 +465,7 @@ function renderBacklog() {
 
   for (const item of visible) {
     const li = el('li', 'item backlog-item' + (item.status === 'done' ? ' done' : ''));
+    li.dataset.id = item.id;
 
     const info = el('div', 'backlog-info');
     info.append(el('span', 'item-title', item.title));
@@ -429,6 +477,12 @@ function renderBacklog() {
     statusBtn.addEventListener('click', () => cycleStatus(item));
     li.append(statusBtn);
 
+    const editBtn = el('button', 'btn-edit', '✏️');
+    editBtn.type = 'button';
+    editBtn.title = 'Rename';
+    editBtn.addEventListener('click', () => renameBacklogItem(item));
+    li.append(editBtn);
+
     const delBtn = el('button', 'btn-delete', '✕');
     delBtn.title = 'Remove from backlog';
     delBtn.addEventListener('click', () => deleteBacklogItem(item));
@@ -438,6 +492,34 @@ function renderBacklog() {
   }
 
   renderStats();
+}
+
+async function renameBacklogItem(item) {
+  const name = (prompt('Rename item:', item.title) || '').trim().slice(0, 120);
+  if (!name || name === item.title) return;
+  item.title = name;
+  await idbPut('backlog', item);
+  renderBacklog();
+}
+
+/* 🎲 Pick a random unfinished item, honoring the active filters */
+function pickRandomBacklog() {
+  const candidates = backlog
+    .filter((b) => typeFilter === 'all' || b.type === typeFilter)
+    .filter((b) => statusFilter === 'all' || b.status === statusFilter)
+    .filter((b) => b.status !== 'done');
+  if (!candidates.length) {
+    alert('Nothing to pick from — add some items or loosen the filters.');
+    return;
+  }
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  renderBacklog();
+  const node = $('#backlog-list').querySelector(`[data-id="${pick.id}"]`);
+  if (node) {
+    node.classList.add('picked');
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => node.classList.remove('picked'), 3000);
+  }
 }
 
 async function cycleStatus(item) {
@@ -521,11 +603,20 @@ function renderStatsPanel() {
     if (s > bestStreak) { bestStreak = s; bestTask = t; }
   }
 
+  // lift the all-time record if a live streak has surpassed it
+  if (!settings.stats) settings.stats = { allTime: 0 };
+  if (bestStreak > (settings.stats.bestEver || 0)) {
+    settings.stats.bestEver = bestStreak;
+    settings.stats.bestEverTitle = bestTask ? bestTask.title : '';
+    saveSettings();
+  }
+
   grid.append(
-    statCard((settings.stats && settings.stats.allTime) || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
+    statCard(settings.stats.allTime || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
     statCard(recorded, 'Completions on current tasks'),
     statCard(`${doneNow}/${tasks.length}`, 'Checked off right now'),
     statCard(bestStreak, 'Best active streak', bestTask ? `🔥 ${bestTask.title}` : 'no streaks yet'),
+    statCard(settings.stats.bestEver || 0, 'Longest streak ever', settings.stats.bestEverTitle ? `🔥 ${settings.stats.bestEverTitle}` : 'no streaks yet'),
     statCard(`${finished}/${backlog.length}`, 'Backlog finished'),
   );
 
@@ -1047,6 +1138,7 @@ async function init() {
 
   $('#clear-done-tasks').addEventListener('click', clearDoneTasks);
   $('#clear-done-backlog').addEventListener('click', clearDoneBacklog);
+  $('#pick-random').addEventListener('click', pickRandomBacklog);
 
   applySettings();
   $('#tabpos-toggle').addEventListener('click', (e) => {
