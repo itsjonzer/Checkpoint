@@ -319,6 +319,13 @@ function renderTasks() {
         { daily: 'day', weekly: 'week', monthly: 'month' }[activeTab]
       }.`;
 
+  // Bulk-clear for completed one-time tasks (recurring tasks reset on
+  // their own, so they're never bulk-deleted)
+  const clearable = visible.filter((t) => t.once && doneIn(t));
+  const clearBtn = $('#clear-done-tasks');
+  clearBtn.hidden = !clearable.length;
+  clearBtn.textContent = `✕ Clear ${clearable.length} completed one-time task${clearable.length === 1 ? '' : 's'}`;
+
   for (const task of visible) {
     const isDone = doneIn(task);
     const li = el('li', `tile ${tileColor(task.id)}` + (isDone ? ' done' : ''));
@@ -367,6 +374,17 @@ async function deleteTask(task) {
   renderTasks();
 }
 
+async function clearDoneTasks() {
+  const doneOnce = tasks.filter((t) => taskTab(t) === activeTab && t.once && t.done.once);
+  if (!doneOnce.length) return;
+  const n = doneOnce.length;
+  if (!confirm(`Remove ${n} completed one-time task${n === 1 ? '' : 's'} from this tab?`)) return;
+  for (const t of doneOnce) await idbDelete('tasks', t.id);
+  const gone = new Set(doneOnce.map((t) => t.id));
+  tasks = tasks.filter((t) => !gone.has(t.id));
+  renderTasks();
+}
+
 /* ---------- Rendering: media backlog ---------- */
 
 function renderBacklog() {
@@ -383,6 +401,11 @@ function renderBacklog() {
   empty.textContent = backlog.length
     ? 'Nothing matches these filters.'
     : 'Your backlog is empty — add the shows, movies, and games you want to get around to.';
+
+  const finished = backlog.filter((b) => b.status === 'done');
+  const clearBtn = $('#clear-done-backlog');
+  clearBtn.hidden = !finished.length;
+  clearBtn.textContent = `✕ Clear ${finished.length} finished item${finished.length === 1 ? '' : 's'}`;
 
   for (const item of visible) {
     const li = el('li', 'item backlog-item' + (item.status === 'done' ? ' done' : ''));
@@ -419,6 +442,16 @@ async function deleteBacklogItem(item) {
   if (!confirm(`Remove "${item.title}" from your backlog?`)) return;
   backlog = backlog.filter((b) => b.id !== item.id);
   await idbDelete('backlog', item.id);
+  renderBacklog();
+}
+
+async function clearDoneBacklog() {
+  const finished = backlog.filter((b) => b.status === 'done');
+  if (!finished.length) return;
+  const n = finished.length;
+  if (!confirm(`Remove ${n} finished item${n === 1 ? '' : 's'} from your backlog?`)) return;
+  for (const b of finished) await idbDelete('backlog', b.id);
+  backlog = backlog.filter((b) => b.status !== 'done');
   renderBacklog();
 }
 
@@ -936,6 +969,9 @@ async function init() {
 
   wireChipRow('#type-filters', 'type', (v) => { typeFilter = v; renderBacklog(); });
   wireChipRow('#status-filters', 'status', (v) => { statusFilter = v; renderBacklog(); });
+
+  $('#clear-done-tasks').addEventListener('click', clearDoneTasks);
+  $('#clear-done-backlog').addEventListener('click', clearDoneBacklog);
 
   applySettings();
   $('#tabpos-toggle').addEventListener('click', (e) => {
