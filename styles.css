@@ -420,6 +420,56 @@ body.tabs-bottom .app { padding-bottom: 7.5rem; }
 
 .btn-delete:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 
+/* ---------- Stats panel ---------- */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.1rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+}
+
+.stat-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.stat-sub {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  margin-top: 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.stats-caption {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0.2rem;
+}
+
+.stat-row-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Settings ---------- */
 
 .settings-card {
