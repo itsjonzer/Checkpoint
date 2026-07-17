@@ -733,6 +733,34 @@ body.custom-bg .app-footer {
   font-size: 0.8rem;
 }
 
+/* ---------- Toast (undo bar / notices) ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(90vw, 480px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+body.tabs-bottom .toast { bottom: 5.75rem; }
+
+.setting-select[type="time"] { color-scheme: dark; }
+
+@media (prefers-color-scheme: light) {
+  .setting-select[type="time"] { color-scheme: light; }
+}
+
 /* ---------- Widget mode (?widget=1) ---------- */
 
 body.widget .app { max-width: 100%; padding: 0.75rem 0.75rem 1.25rem; }
