@@ -142,7 +142,7 @@ function tileColor(id) {
 /* ---------- Settings ---------- */
 
 const SETTINGS_KEY = 'checkpoint-settings';
-const settings = { tabPosition: 'top', bgSharpen: true, customTabs: [], clockFont: 'default', stats: { allTime: 0 }, statsSeeded: false };
+const settings = { tabPosition: 'top', bgSharpen: true, customTabs: [], clockFont: 'default', stats: { allTime: 0 }, statsSeeded: false, reminderTime: null };
 
 const CLOCK_FONTS = {
   default: '"Segoe UI", system-ui, sans-serif',
@@ -172,6 +172,7 @@ function applySettings() {
   });
   $('#clock').style.fontFamily = CLOCK_FONTS[settings.clockFont] || CLOCK_FONTS.default;
   $('#clock-font').value = CLOCK_FONTS[settings.clockFont] ? settings.clockFont : 'default';
+  $('#reminder-time').value = settings.reminderTime || '';
 }
 
 /* ---------- Tab helpers ----------
@@ -398,19 +399,20 @@ async function toggleTask(task) {
   // unchecking decrements so check/uncheck cycles don't inflate it
   if (!settings.stats) settings.stats = { allTime: 0 };
   if (task.done[key]) {
+    const streakAtCheck = task.once ? 0 : computeStreak(task, now); // before removal
     delete task.done[key];
     settings.stats.allTime = Math.max(0, (settings.stats.allTime || 0) - 1);
+    awardXp(-taskXp(task, streakAtCheck));
   } else {
     task.done[key] = true;
     settings.stats.allTime = (settings.stats.allTime || 0) + 1;
+    const streak = task.once ? 0 : computeStreak(task, now);
     // record-keeping for longest streak ever achieved
-    if (!task.once) {
-      const s = computeStreak(task, now);
-      if (s > (settings.stats.bestEver || 0)) {
-        settings.stats.bestEver = s;
-        settings.stats.bestEverTitle = task.title;
-      }
+    if (!task.once && streak > (settings.stats.bestEver || 0)) {
+      settings.stats.bestEver = streak;
+      settings.stats.bestEverTitle = task.title;
     }
+    awardXp(taskXp(task, streak));
     // completing the last remaining task on this tab earns confetti
     const tabTasks = tasks.filter((t) => taskTab(t) === activeTab);
     if (tabTasks.length && tabTasks.every((t) => t.done[t.once ? 'once' : periodKey(t.recurrence, now)])) {
@@ -420,6 +422,58 @@ async function toggleTask(task) {
   saveSettings();
   await idbPut('tasks', task);
   renderTasks();
+}
+
+/* ---------- Toast with optional Undo ---------- */
+
+let toastTimer = null;
+let toastUndoFn = null;
+
+function toast(message, undoFn) {
+  $('#toast-msg').textContent = message;
+  $('#toast-undo').hidden = !undoFn;
+  toastUndoFn = undoFn || null;
+  $('#toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 8000);
+}
+
+function hideToast() {
+  $('#toast').hidden = true;
+  toastUndoFn = null;
+}
+
+/* ---------- XP & levels ----------
+   Completions earn XP (recurring 10 + streak bonus, one-time 15,
+   backlog finishes 25). Levels get progressively longer. Unchecking
+   subtracts the same award so toggling can't farm XP. */
+
+function levelInfo(xp) {
+  let level = 1;
+  let need = 100;
+  let into = xp;
+  while (into >= need) {
+    into -= need;
+    level++;
+    need = 100 + (level - 1) * 50;
+  }
+  return { level, into, need };
+}
+
+function taskXp(task, streak) {
+  return task.once ? 15 : 10 + 2 * Math.min(Math.max(streak - 1, 0), 10);
+}
+
+function awardXp(amount) {
+  if (!settings.stats) settings.stats = { allTime: 0 };
+  const before = levelInfo(settings.stats.xp || 0).level;
+  settings.stats.xp = Math.max(0, (settings.stats.xp || 0) + amount);
+  const after = levelInfo(settings.stats.xp).level;
+  if (after > before) {
+    confetti();
+    toast(`🎉 Level up! You reached Level ${after}`);
+  }
+  renderStats();
 }
 
 /* Full-tab completion celebration: ~80 falling pieces, then cleanup */
@@ -442,21 +496,30 @@ function confetti() {
 }
 
 async function deleteTask(task) {
-  if (!confirm(`Delete "${task.title}"? Its history goes with it.`)) return;
   tasks = tasks.filter((t) => t.id !== task.id);
   await idbDelete('tasks', task.id);
   renderTasks();
+  toast(`Deleted "${task.title}"`, async () => {
+    tasks.push(task);
+    await idbPut('tasks', task);
+    renderTasks();
+  });
 }
 
 async function clearDoneTasks() {
   const doneOnce = tasks.filter((t) => taskTab(t) === activeTab && t.once && t.done.once);
   if (!doneOnce.length) return;
-  const n = doneOnce.length;
-  if (!confirm(`Remove ${n} completed one-time task${n === 1 ? '' : 's'} from this tab?`)) return;
-  for (const t of doneOnce) await idbDelete('tasks', t.id);
   const gone = new Set(doneOnce.map((t) => t.id));
   tasks = tasks.filter((t) => !gone.has(t.id));
+  for (const t of doneOnce) await idbDelete('tasks', t.id);
   renderTasks();
+  toast(`Cleared ${doneOnce.length} completed task${doneOnce.length === 1 ? '' : 's'}`, async () => {
+    for (const t of doneOnce) {
+      tasks.push(t);
+      await idbPut('tasks', t);
+    }
+    renderTasks();
+  });
 }
 
 /* ---------- Rendering: media backlog ---------- */
@@ -555,6 +618,7 @@ function pickRandomBacklog() {
 }
 
 async function cycleStatus(item) {
+  const wasDone = item.status === 'done';
   item.status = STATUS_NEXT[item.status];
   item.finishedAt = item.status === 'done' ? Date.now() : null;
   if (item.status === 'done') {
@@ -563,6 +627,11 @@ async function cycleStatus(item) {
       const r = parseInt(raw.trim(), 10);
       if (r >= 1 && r <= 5) item.rating = r;
     }
+    awardXp(25);
+    saveSettings();
+  } else if (wasDone) {
+    awardXp(-25);
+    saveSettings();
   }
   await idbPut('backlog', item);
   renderBacklog();
@@ -586,29 +655,67 @@ async function setProgress(item) {
 }
 
 async function deleteBacklogItem(item) {
-  if (!confirm(`Remove "${item.title}" from your backlog?`)) return;
   backlog = backlog.filter((b) => b.id !== item.id);
   await idbDelete('backlog', item.id);
   renderBacklog();
+  toast(`Removed "${item.title}"`, async () => {
+    backlog.push(item);
+    await idbPut('backlog', item);
+    renderBacklog();
+  });
 }
 
 async function clearDoneBacklog() {
   const finished = backlog.filter((b) => b.status === 'done');
   if (!finished.length) return;
-  const n = finished.length;
-  if (!confirm(`Remove ${n} finished item${n === 1 ? '' : 's'} from your backlog?`)) return;
-  for (const b of finished) await idbDelete('backlog', b.id);
   backlog = backlog.filter((b) => b.status !== 'done');
+  for (const b of finished) await idbDelete('backlog', b.id);
   renderBacklog();
+  toast(`Cleared ${finished.length} finished item${finished.length === 1 ? '' : 's'}`, async () => {
+    for (const b of finished) {
+      backlog.push(b);
+      await idbPut('backlog', b);
+    }
+    renderBacklog();
+  });
 }
 
 /* ---------- Footer stats ---------- */
 
 function renderStats() {
   const finished = backlog.filter((b) => b.status === 'done').length;
-  const parts = [`${tasks.length} recurring task${tasks.length === 1 ? '' : 's'}`];
+  const lvl = levelInfo((settings.stats && settings.stats.xp) || 0);
+  const parts = [`⚡ Lv ${lvl.level}`, `${tasks.length} task${tasks.length === 1 ? '' : 's'}`];
   if (backlog.length) parts.push(`${finished}/${backlog.length} backlog items finished`);
   $('#stats-label').textContent = parts.join(' · ');
+}
+
+/* ---------- Daily reminder ----------
+   Fires once per day at the configured time while any Checkpoint
+   window (app or widget) is open, if tasks are still unfinished.
+   Uses a system notification when permitted, else the in-app toast. */
+
+function fireReminder(count) {
+  const body = `You still have ${count} unfinished task${count === 1 ? '' : 's'} today.`;
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Checkpoint ✅', { body, icon: 'icon.svg' });
+      return;
+    }
+  } catch (e) { /* fall back to toast */ }
+  toast(`⏰ ${body}`);
+}
+
+function checkReminder() {
+  if (!settings.reminderTime) return;
+  const now = new Date();
+  const todayK = fmtDate(now);
+  if (localStorage.getItem('checkpoint-reminded') === todayK) return;
+  const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  if (hm < settings.reminderTime) return;
+  localStorage.setItem('checkpoint-reminded', todayK); // once per day
+  const unfinished = tasks.filter((t) => !t.done[t.once ? 'once' : periodKey(t.recurrence, now)]).length;
+  if (unfinished) fireReminder(unfinished);
 }
 
 /* ---------- Tabs & filters ---------- */
@@ -670,7 +777,12 @@ function renderStatsPanel() {
   const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
   const finishedThisYear = backlog.filter((b) => b.status === 'done' && b.finishedAt && b.finishedAt >= yearStart).length;
 
+  const xp = settings.stats.xp || 0;
+  const lvl = levelInfo(xp);
+
   grid.append(
+    statCard(`⚡ ${lvl.level}`, 'Level', `${lvl.into}/${lvl.need} XP into this level`),
+    statCard(xp, 'Total XP', 'tasks +10 & streak bonus · backlog +25'),
     statCard(settings.stats.allTime || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
     statCard(recorded, 'Completions on current tasks'),
     statCard(`${doneNow}/${tasks.length}`, 'Checked off right now'),
@@ -1175,6 +1287,14 @@ async function init() {
     saveSettings();
   }
 
+  // One-time XP seed so past completions count toward your level
+  if (!settings.xpSeeded) {
+    const finishedCount = backlog.filter((b) => b.status === 'done').length;
+    settings.stats.xp = Math.max(settings.stats.xp || 0, (settings.stats.allTime || 0) * 10 + finishedCount * 25);
+    settings.xpSeeded = true;
+    saveSettings();
+  }
+
   const bgRecord = await idbGet('misc', 'background');
   if (bgRecord && bgRecord.blob) applyBackground(bgRecord.blob);
 
@@ -1190,6 +1310,25 @@ async function init() {
   setInterval(updateClock, 1000);
   $('#clock-font').addEventListener('change', (e) => {
     settings.clockFont = e.target.value;
+    saveSettings();
+    applySettings();
+  });
+
+  $('#toast-undo').addEventListener('click', async () => {
+    const fn = toastUndoFn;
+    hideToast();
+    if (fn) await fn();
+  });
+
+  $('#reminder-time').addEventListener('change', async (e) => {
+    settings.reminderTime = e.target.value || null;
+    saveSettings();
+    if (settings.reminderTime && 'Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (err) { /* toast fallback covers it */ }
+    }
+  });
+  $('#reminder-off').addEventListener('click', () => {
+    settings.reminderTime = null;
     saveSettings();
     applySettings();
   });
@@ -1390,7 +1529,9 @@ async function init() {
   // widget stays "visible" so it never gets focus/visibility events.
   // Reloads only when something actually changed.
   lastSeenRev = localStorage.getItem('checkpoint-rev');
+  checkReminder();
   setInterval(async () => {
+    checkReminder();
     // same-browser changes: another window bumped the rev stamp
     const rev = localStorage.getItem('checkpoint-rev');
     if (rev !== lastSeenRev) {
