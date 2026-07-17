@@ -142,7 +142,7 @@ function tileColor(id) {
 /* ---------- Settings ---------- */
 
 const SETTINGS_KEY = 'checkpoint-settings';
-const settings = { tabPosition: 'top', bgSharpen: true, customTabs: [], clockFont: 'default' };
+const settings = { tabPosition: 'top', bgSharpen: true, customTabs: [], clockFont: 'default', stats: { allTime: 0 }, statsSeeded: false };
 
 const CLOCK_FONTS = {
   default: '"Segoe UI", system-ui, sans-serif',
@@ -361,8 +361,17 @@ function renderTasks() {
 
 async function toggleTask(task) {
   const key = task.once ? 'once' : periodKey(task.recurrence, new Date());
-  if (task.done[key]) delete task.done[key];
-  else task.done[key] = true;
+  // lifetime completion counter — survives task deletion and bulk-clear;
+  // unchecking decrements so check/uncheck cycles don't inflate it
+  if (!settings.stats) settings.stats = { allTime: 0 };
+  if (task.done[key]) {
+    delete task.done[key];
+    settings.stats.allTime = Math.max(0, (settings.stats.allTime || 0) - 1);
+  } else {
+    task.done[key] = true;
+    settings.stats.allTime = (settings.stats.allTime || 0) + 1;
+  }
+  saveSettings();
   await idbPut('tasks', task);
   renderTasks();
 }
@@ -474,12 +483,69 @@ function switchTab(tab) {
   const taskTabActive = isTaskTab(tab);
   $('#tasks-panel').hidden = !taskTabActive;
   $('#backlog-panel').hidden = tab !== 'backlog';
+  $('#stats-panel').hidden = tab !== 'stats';
   $('#settings-panel').hidden = tab !== 'settings';
   if (taskTabActive) {
     populateRepeatSelect(tab);
     renderTasks();
   } else if (tab === 'backlog') {
     renderBacklog();
+  } else if (tab === 'stats') {
+    renderStatsPanel();
+  }
+}
+
+/* ---------- Stats panel ---------- */
+
+function statCard(value, label, sub) {
+  const card = el('div', 'stat-card');
+  card.append(el('div', 'stat-value', String(value)), el('div', 'stat-label', label));
+  if (sub) card.append(el('div', 'stat-sub', sub));
+  return card;
+}
+
+function renderStatsPanel() {
+  const now = new Date();
+  const grid = $('#stats-grid');
+  grid.replaceChildren();
+
+  const recorded = tasks.reduce((s, t) => s + Object.keys(t.done || {}).length, 0);
+  const doneNow = tasks.filter((t) => t.done[t.once ? 'once' : periodKey(t.recurrence, now)]).length;
+  const finished = backlog.filter((b) => b.status === 'done').length;
+
+  let bestStreak = 0;
+  let bestTask = null;
+  for (const t of tasks) {
+    if (t.once) continue;
+    const s = computeStreak(t, now);
+    if (s > bestStreak) { bestStreak = s; bestTask = t; }
+  }
+
+  grid.append(
+    statCard((settings.stats && settings.stats.allTime) || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
+    statCard(recorded, 'Completions on current tasks'),
+    statCard(`${doneNow}/${tasks.length}`, 'Checked off right now'),
+    statCard(bestStreak, 'Best active streak', bestTask ? `🔥 ${bestTask.title}` : 'no streaks yet'),
+    statCard(`${finished}/${backlog.length}`, 'Backlog finished'),
+  );
+
+  const breakdown = $('#stats-breakdown');
+  breakdown.replaceChildren();
+  const tabList = [
+    { id: 'daily', name: '☀️ Daily' }, { id: 'weekly', name: '🗓️ Weekly' }, { id: 'monthly', name: '📆 Monthly' },
+    ...settings.customTabs.map((t) => ({ id: t.id, name: `${t.icon} ${t.name}` })),
+  ];
+  for (const tb of tabList) {
+    const owned = tasks.filter((t) => taskTab(t) === tb.id);
+    const count = owned.reduce((s, t) => s + Object.keys(t.done || {}).length, 0);
+    const row = el('div', 'setting-row');
+    const info = el('div', 'setting-info');
+    info.append(
+      el('span', 'setting-name', tb.name),
+      el('span', 'setting-desc', `${owned.length} task${owned.length === 1 ? '' : 's'}`)
+    );
+    row.append(info, el('span', 'stat-row-value', String(count)));
+    breakdown.append(row);
   }
 }
 
@@ -746,7 +812,7 @@ async function adoptData(data) {
   applySettings();
   renderNav();
   renderCustomTabList();
-  if (!isTaskTab(activeTab) && activeTab !== 'backlog' && activeTab !== 'settings') activeTab = 'daily';
+  if (!isTaskTab(activeTab) && !['backlog', 'stats', 'settings'].includes(activeTab)) activeTab = 'daily';
   switchTab(activeTab);
   broadcastChange(); // let other open windows pick up the adopted data
   return true;
@@ -865,7 +931,7 @@ async function reloadData() {
   applySettings();
   renderNav();
   renderCustomTabList();
-  if (!isTaskTab(activeTab) && activeTab !== 'backlog' && activeTab !== 'settings') activeTab = 'daily';
+  if (!isTaskTab(activeTab) && !['backlog', 'stats', 'settings'].includes(activeTab)) activeTab = 'daily';
   switchTab(activeTab);
 }
 
@@ -907,6 +973,15 @@ async function init() {
 
   db = await openDB();
   [tasks, backlog] = await Promise.all([idbAll('tasks'), idbAll('backlog')]);
+
+  // One-time seed of the all-time counter from completions already
+  // recorded on existing tasks, so history predating this feature counts
+  if (!settings.statsSeeded) {
+    const recorded = tasks.reduce((s, t) => s + Object.keys(t.done || {}).length, 0);
+    settings.stats = { allTime: Math.max((settings.stats && settings.stats.allTime) || 0, recorded) };
+    settings.statsSeeded = true;
+    saveSettings();
+  }
 
   const bgRecord = await idbGet('misc', 'background');
   if (bgRecord && bgRecord.blob) applyBackground(bgRecord.blob);
