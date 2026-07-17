@@ -147,6 +147,16 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
+              <span class="setting-name">Daily reminder</span>
+              <span class="setting-desc">Notify at this time if tasks are unfinished (works while the app or widget is open)</span>
+            </div>
+            <div class="bg-controls">
+              <input type="time" id="reminder-time" class="setting-select">
+              <button type="button" class="btn-secondary" id="reminder-off">Off</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
               <span class="setting-name">Custom background</span>
               <span class="setting-desc">Pick an image — the app recolors itself to match it</span>
             </div>
@@ -212,6 +222,11 @@
     <footer class="app-footer">
       <span id="stats-label"></span>
     </footer>
+  </div>
+
+  <div id="toast" class="toast" hidden>
+    <span id="toast-msg"></span>
+    <button type="button" class="btn-secondary" id="toast-undo" hidden>Undo</button>
   </div>
 
   <script src="app.js"></script>
