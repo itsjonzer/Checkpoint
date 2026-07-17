@@ -177,6 +177,25 @@ body.tabs-bottom .app { padding-bottom: 7.5rem; }
   transition: width 0.3s ease;
 }
 
+/* ---------- Bulk-clear buttons ---------- */
+
+.btn-clear {
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.75rem;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-clear:hover { color: var(--danger); border-color: var(--danger); }
+
+#clear-done-backlog { margin-top: 0.1rem; align-self: flex-start; }
+
 /* ---------- Add forms ---------- */
 
 .add-form {
