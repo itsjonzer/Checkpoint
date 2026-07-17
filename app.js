@@ -91,15 +91,36 @@ function prevPeriodDate(recurrence, d) {
   return new Date(d.getFullYear(), d.getMonth() - 1, 1);
 }
 
+/* Daily tasks may be scheduled on specific weekdays only (task.days =
+   array of getDay() numbers; null/empty = every day). Unscheduled days
+   don't count toward or against progress and streaks. */
+function isScheduledOn(task, d) {
+  return !(task.recurrence === 'daily' && Array.isArray(task.days) && task.days.length && !task.days.includes(d.getDay()));
+}
+
+function prevScheduledDate(task, d) {
+  let x = prevPeriodDate(task.recurrence, d);
+  let guard = 0;
+  while (!isScheduledOn(task, x) && guard++ < 8) x = prevPeriodDate(task.recurrence, x);
+  return x;
+}
+
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function daysLabel(days) {
+  return days.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => DAY_ABBR[d]).join('·');
+}
+
 function computeStreak(task, now) {
+  // frozen days (streak freezes) bridge gaps as if they were completed
+  const hit = (k) => Boolean(task.done[k] || (task.frozen && task.frozen[k]));
   let d = new Date(now);
-  if (!task.done[periodKey(task.recurrence, d)]) {
-    d = prevPeriodDate(task.recurrence, d);
-  }
+  if (!isScheduledOn(task, d)) d = prevScheduledDate(task, d);
+  if (!hit(periodKey(task.recurrence, d))) d = prevScheduledDate(task, d);
   let streak = 0;
-  while (task.done[periodKey(task.recurrence, d)]) {
+  while (hit(periodKey(task.recurrence, d))) {
     streak++;
-    d = prevPeriodDate(task.recurrence, d);
+    d = prevScheduledDate(task, d);
   }
   return streak;
 }
@@ -123,6 +144,8 @@ let backlog = [];
 let activeTab = 'daily';
 let typeFilter = 'all';
 let statusFilter = 'all';
+let searchQuery = '';
+let sortMode = 'status';
 
 const STATUS_ORDER = { inprogress: 0, backlog: 1, done: 2 };
 const STATUS_LABEL = { backlog: 'Backlog', inprogress: 'In progress', done: 'Done ✓' };
@@ -138,6 +161,9 @@ function tileColor(id) {
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return TILE_COLORS[h % TILE_COLORS.length];
 }
+
+/* A user-picked color wins over the automatic hash-assigned one */
+const tileColorFor = (t) => (TILE_COLORS.includes(t.color) ? t.color : tileColor(t.id));
 
 /* ---------- Settings ---------- */
 
@@ -298,18 +324,22 @@ function renderTasks() {
   // period key, so they never reset when the day/week/month rolls over.
   const doneIn = (t) => Boolean(t.done[t.once ? 'once' : periodKey(t.recurrence, now)]);
 
+  // sort order: active first, then off-schedule "rest" tasks, done last
+  const rank = (t) => (doneIn(t) ? 2 : (t.once || isScheduledOn(t, now)) ? 0 : 1);
   const visible = tasks
     .filter((t) => taskTab(t) === activeTab)
-    .sort((a, b) => (doneIn(a) - doneIn(b)) || a.createdAt - b.createdAt);
+    .sort((a, b) => (rank(a) - rank(b)) || a.createdAt - b.createdAt);
 
-  const doneCount = visible.filter(doneIn).length;
-  $('#progress-label').textContent = visible.length
-    ? `${doneCount} of ${visible.length} done`
-    : 'No tasks yet';
+  // only tasks actually scheduled today count toward progress
+  const countable = visible.filter((t) => t.once || isScheduledOn(t, now));
+  const doneCount = countable.filter(doneIn).length;
+  $('#progress-label').textContent = countable.length
+    ? `${doneCount} of ${countable.length} done`
+    : (visible.length ? 'Nothing scheduled today' : 'No tasks yet');
   const custom = customTab(activeTab);
   $('#period-label').textContent = custom ? custom.name : periodLabel(activeTab, now);
-  $('#progress-bar').style.width = visible.length
-    ? `${Math.round((doneCount / visible.length) * 100)}%`
+  $('#progress-bar').style.width = countable.length
+    ? `${Math.round((doneCount / countable.length) * 100)}%`
     : '0%';
 
   const empty = $('#tasks-empty');
@@ -332,6 +362,7 @@ function renderTasks() {
 
   for (const task of visible) {
     const isDone = doneIn(task);
+    const resting = !task.once && !isScheduledOn(task, now);
     let subText;
     let dueClass = '';
     if (task.once) {
@@ -344,17 +375,23 @@ function renderTasks() {
       } else {
         subText = '📌 one-time';
       }
+    } else if (resting) {
+      subText = `😴 rests today · ${daysLabel(task.days)}`;
     } else {
       const streak = computeStreak(task, now);
-      subText = (streak >= 2 ? `🔥 ${streak} · ` : '') + RECURRENCE_LABEL[task.recurrence];
+      const cadence = (task.recurrence === 'daily' && Array.isArray(task.days) && task.days.length)
+        ? `🔁 ${daysLabel(task.days)}`
+        : RECURRENCE_LABEL[task.recurrence];
+      subText = (streak >= 2 ? `🔥 ${streak} · ` : '') + cadence;
     }
 
-    const li = el('li', `tile ${tileColor(task.id)}` + (isDone ? ' done' : '') + dueClass);
+    const li = el('li', `tile ${tileColorFor(task)}` + (isDone ? ' done' : '') + (resting ? ' rest' : '') + dueClass);
 
     const main = el('button', 'tile-main');
     main.type = 'button';
-    main.title = isDone ? 'Mark as not done' : 'Mark as done';
-    main.addEventListener('click', () => toggleTask(task));
+    main.disabled = resting;
+    main.title = resting ? 'Not scheduled today' : (isDone ? 'Mark as not done' : 'Mark as done');
+    if (!resting) main.addEventListener('click', () => toggleTask(task));
 
     const title = el('span', 'tile-title', task.title);
     const sub = el('span', 'tile-sub', subText);
@@ -385,9 +422,11 @@ function dueLabel(d) {
 }
 
 async function renameTask(task) {
-  const name = (prompt('Rename task:', task.title) || '').trim().slice(0, 120);
-  if (!name || name === task.title) return;
-  task.title = name;
+  const res = await modalPrompt('Edit task', { value: task.title, color: task.color || '' });
+  if (res === null) return;
+  const name = res.value.trim().slice(0, 120);
+  if (name) task.title = name;
+  task.color = res.color || null;
   await idbPut('tasks', task);
   renderTasks();
 }
@@ -406,6 +445,7 @@ async function toggleTask(task) {
   } else {
     task.done[key] = true;
     settings.stats.allTime = (settings.stats.allTime || 0) + 1;
+    if (!task.once) tryStreakFreeze(task, now);
     const streak = task.once ? 0 : computeStreak(task, now);
     // record-keeping for longest streak ever achieved
     if (!task.once && streak > (settings.stats.bestEver || 0)) {
@@ -413,8 +453,8 @@ async function toggleTask(task) {
       settings.stats.bestEverTitle = task.title;
     }
     awardXp(taskXp(task, streak));
-    // completing the last remaining task on this tab earns confetti
-    const tabTasks = tasks.filter((t) => taskTab(t) === activeTab);
+    // completing the last remaining scheduled task on this tab earns confetti
+    const tabTasks = tasks.filter((t) => taskTab(t) === activeTab && (t.once || isScheduledOn(t, now)));
     if (tabTasks.length && tabTasks.every((t) => t.done[t.once ? 'once' : periodKey(t.recurrence, now)])) {
       confetti();
     }
@@ -443,6 +483,90 @@ function hideToast() {
   toastUndoFn = null;
 }
 
+/* ---------- Modal prompt (in-place replacement for window.prompt) ----------
+   modalPrompt(title, opts) -> Promise resolving to the entered string,
+   null on cancel. With opts.color it resolves {value, color}; with
+   opts.stars it shows 1–5 star buttons instead of a text input. */
+
+function modalPrompt(title, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = el('div', 'modal-overlay');
+    const card = el('div', 'modal-card');
+    card.append(el('h3', 'modal-title', title));
+
+    let input = null;
+    let colorPick = opts.color !== undefined ? (opts.color || null) : undefined;
+
+    if (opts.stars) {
+      const row = el('div', 'modal-stars');
+      for (let i = 1; i <= 5; i++) {
+        const b = el('button', 'modal-star', '⭐'.repeat(i));
+        b.type = 'button';
+        b.addEventListener('click', () => finish(String(i)));
+        row.append(b);
+      }
+      card.append(row);
+      const clear = el('button', 'btn-secondary', 'No rating');
+      clear.type = 'button';
+      clear.addEventListener('click', () => finish(''));
+      card.append(clear);
+    } else {
+      input = el('input', 'modal-input');
+      input.type = 'text';
+      input.placeholder = opts.placeholder || '';
+      input.value = opts.value || '';
+      input.maxLength = opts.maxLength || 120;
+      card.append(input);
+    }
+
+    if (colorPick !== undefined) {
+      const row = el('div', 'modal-colors');
+      const options = [''].concat(TILE_COLORS);
+      for (const c of options) {
+        const sw = el('button', 'modal-swatch' + (c ? ` ${c}` : ' swatch-auto') + ((colorPick || '') === c ? ' selected' : ''), c ? '' : 'auto');
+        sw.type = 'button';
+        sw.title = c ? c.replace('tile-', '') : 'Automatic color';
+        sw.addEventListener('click', () => {
+          colorPick = c || null;
+          row.querySelectorAll('.modal-swatch').forEach((s) => s.classList.remove('selected'));
+          sw.classList.add('selected');
+        });
+        row.append(sw);
+      }
+      card.append(row);
+    }
+
+    if (!opts.stars) {
+      const actions = el('div', 'modal-actions');
+      const cancel = el('button', 'btn-secondary', 'Cancel');
+      cancel.type = 'button';
+      cancel.addEventListener('click', () => finish(null));
+      const ok = el('button', 'btn-primary', 'OK');
+      ok.type = 'button';
+      ok.addEventListener('click', () => finish(input ? input.value : ''));
+      actions.append(cancel, ok);
+      card.append(actions);
+    }
+
+    function finish(val) {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (val === null) resolve(null);
+      else resolve(colorPick !== undefined ? { value: val, color: colorPick } : val);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); finish(null); }
+      else if (e.key === 'Enter' && input) { e.preventDefault(); finish(input.value); }
+    }
+    document.addEventListener('keydown', onKey, true);
+    overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) finish(null); });
+
+    overlay.append(card);
+    document.body.append(overlay);
+    if (input) { input.focus(); input.select(); }
+  });
+}
+
 /* ---------- XP & levels ----------
    Completions earn XP (recurring 10 + streak bonus, one-time 15,
    backlog finishes 25). Levels get progressively longer. Unchecking
@@ -462,6 +586,36 @@ function levelInfo(xp) {
 
 function taskXp(task, streak) {
   return task.once ? 15 : 10 + 2 * Math.min(Math.max(streak - 1, 0), 10);
+}
+
+/* ---------- Streak freezes ----------
+   Bought with XP (Stats tab). When you complete a task after missing
+   exactly one scheduled period, a freeze is consumed automatically to
+   bridge the gap so the streak survives. */
+
+function tryStreakFreeze(task, now) {
+  if (!settings.stats || !(settings.stats.freezes > 0)) return;
+  const hit = (k) => Boolean(task.done[k] || (task.frozen && task.frozen[k]));
+  const prev = prevScheduledDate(task, now);
+  const prevKey = periodKey(task.recurrence, prev);
+  if (hit(prevKey)) return; // no gap — nothing to save
+  const prev2 = prevScheduledDate(task, prev);
+  if (!hit(periodKey(task.recurrence, prev2))) return; // gap bigger than one — streak already lost
+  settings.stats.freezes--;
+  task.frozen = task.frozen || {};
+  task.frozen[prevKey] = true;
+  toast(`🧊 Streak freeze used — "${task.title}" streak saved!`);
+}
+
+function buyFreeze() {
+  if (!settings.stats) settings.stats = { allTime: 0 };
+  if ((settings.stats.xp || 0) < 150 || (settings.stats.freezes || 0) >= 3) return;
+  settings.stats.xp -= 150;
+  settings.stats.freezes = (settings.stats.freezes || 0) + 1;
+  saveSettings();
+  renderStats();
+  renderStatsPanel();
+  toast('🧊 Streak freeze purchased — it auto-saves a missed day.');
 }
 
 function awardXp(amount) {
@@ -528,15 +682,22 @@ function renderBacklog() {
   const list = $('#backlog-list');
   list.replaceChildren();
 
+  const sorters = {
+    status: (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.addedAt - b.addedAt,
+    added: (a, b) => b.addedAt - a.addedAt,
+    title: (a, b) => a.title.localeCompare(b.title),
+    rating: (a, b) => (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title),
+  };
   const visible = backlog
     .filter((b) => typeFilter === 'all' || b.type === typeFilter)
     .filter((b) => statusFilter === 'all' || b.status === statusFilter)
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.addedAt - b.addedAt);
+    .filter((b) => !searchQuery || b.title.toLowerCase().includes(searchQuery))
+    .sort(sorters[sortMode] || sorters.status);
 
   const empty = $('#backlog-empty');
   empty.hidden = visible.length > 0;
   empty.textContent = backlog.length
-    ? 'Nothing matches these filters.'
+    ? (searchQuery ? `Nothing matches "${searchQuery}".` : 'Nothing matches these filters.')
     : 'Your backlog is empty — add the shows, movies, and games you want to get around to.';
 
   const finished = backlog.filter((b) => b.status === 'done');
@@ -590,7 +751,9 @@ function renderBacklog() {
 }
 
 async function renameBacklogItem(item) {
-  const name = (prompt('Rename item:', item.title) || '').trim().slice(0, 120);
+  const raw = await modalPrompt('Rename item', { value: item.title });
+  if (raw === null) return;
+  const name = raw.trim().slice(0, 120);
   if (!name || name === item.title) return;
   item.title = name;
   await idbPut('backlog', item);
@@ -622,9 +785,9 @@ async function cycleStatus(item) {
   item.status = STATUS_NEXT[item.status];
   item.finishedAt = item.status === 'done' ? Date.now() : null;
   if (item.status === 'done') {
-    const raw = prompt(`Nice! Rate "${item.title}" 1–5 (optional):`);
+    const raw = await modalPrompt(`Nice! Rate "${item.title}"`, { stars: true });
     if (raw !== null) {
-      const r = parseInt(raw.trim(), 10);
+      const r = parseInt(raw, 10);
       if (r >= 1 && r <= 5) item.rating = r;
     }
     awardXp(25);
@@ -638,16 +801,18 @@ async function cycleStatus(item) {
 }
 
 async function rateItem(item) {
-  const raw = prompt(`Rate "${item.title}" 1–5 (empty to clear):`, item.rating || '');
+  const raw = await modalPrompt(`Rate "${item.title}"`, { stars: true });
   if (raw === null) return;
-  const r = parseInt(raw.trim(), 10);
+  const r = parseInt(raw, 10);
   item.rating = (r >= 1 && r <= 5) ? r : null;
   await idbPut('backlog', item);
   renderBacklog();
 }
 
 async function setProgress(item) {
-  const raw = prompt('Where are you? (e.g. S2E5, 40%, chapter 3 — empty to clear)', item.progress || '');
+  const raw = await modalPrompt('Where are you?', {
+    value: item.progress || '', placeholder: 'e.g. S2E5, 40%, chapter 3', maxLength: 24,
+  });
   if (raw === null) return;
   item.progress = raw.trim().slice(0, 24) || null;
   await idbPut('backlog', item);
@@ -714,7 +879,8 @@ function checkReminder() {
   const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   if (hm < settings.reminderTime) return;
   localStorage.setItem('checkpoint-reminded', todayK); // once per day
-  const unfinished = tasks.filter((t) => !t.done[t.once ? 'once' : periodKey(t.recurrence, now)]).length;
+  const unfinished = tasks.filter((t) =>
+    (t.once || isScheduledOn(t, now)) && !t.done[t.once ? 'once' : periodKey(t.recurrence, now)]).length;
   if (unfinished) fireReminder(unfinished);
 }
 
@@ -780,9 +946,22 @@ function renderStatsPanel() {
   const xp = settings.stats.xp || 0;
   const lvl = levelInfo(xp);
 
+  const freezeCard = el('div', 'stat-card');
+  freezeCard.append(
+    el('div', 'stat-value', `🧊 ${settings.stats.freezes || 0}`),
+    el('div', 'stat-label', 'Streak freezes'),
+    el('div', 'stat-sub', 'auto-saves a missed day (max 3)')
+  );
+  const buyBtn = el('button', 'btn-secondary buy-freeze', 'Buy — 150 XP');
+  buyBtn.type = 'button';
+  buyBtn.disabled = xp < 150 || (settings.stats.freezes || 0) >= 3;
+  buyBtn.addEventListener('click', buyFreeze);
+  freezeCard.append(buyBtn);
+
   grid.append(
     statCard(`⚡ ${lvl.level}`, 'Level', `${lvl.into}/${lvl.need} XP into this level`),
     statCard(xp, 'Total XP', 'tasks +10 & streak bonus · backlog +25'),
+    freezeCard,
     statCard(settings.stats.allTime || 0, 'All-time completions', 'keeps counting after tasks are deleted'),
     statCard(recorded, 'Completions on current tasks'),
     statCard(`${doneNow}/${tasks.length}`, 'Checked off right now'),
@@ -847,9 +1026,22 @@ function renderHeatmap() {
   }
 }
 
-/* The optional due-date field only applies to one-time tasks */
-function updateDueVisibility() {
-  $('#task-due').hidden = $('#task-repeat').value !== 'once';
+/* What recurrence the current form selection would produce */
+function effectiveRecurrence() {
+  const val = $('#task-repeat').value;
+  if (customTab(activeTab)) return val; // once | daily | weekly | monthly
+  return val === 'once' ? 'once' : activeTab;
+}
+
+/* Due date applies to one-time tasks; the weekday picker to daily ones */
+function updateFormExtras() {
+  const rec = effectiveRecurrence();
+  $('#task-due').hidden = rec !== 'once';
+  $('#day-picker').hidden = rec !== 'daily';
+}
+
+function resetDayPicker() {
+  document.querySelectorAll('#day-picker .day-chip').forEach((c) => c.classList.add('active'));
 }
 
 /* Built-in tabs offer "repeats <tab>" or one-time; custom tabs let
@@ -872,7 +1064,7 @@ function populateRepeatSelect(tab) {
     opt('repeat', `🔁 Repeats ${tab}`);
     opt('once', '📌 One-time');
   }
-  updateDueVisibility();
+  updateFormExtras();
 }
 
 /* ---------- Custom tab management ---------- */
@@ -909,10 +1101,14 @@ function renderCustomTabList() {
   ul.hidden = !settings.customTabs.length;
 }
 
-function addCustomTab() {
-  const name = (prompt('Name for the new tab:') || '').trim().slice(0, 20);
+async function addCustomTab() {
+  const rawName = await modalPrompt('Name for the new tab', { maxLength: 20 });
+  if (rawName === null) return;
+  const name = rawName.trim().slice(0, 20);
   if (!name) return;
-  const icon = ((prompt('Emoji icon for the tab (optional):') || '').trim() || '📝').slice(0, 4);
+  const rawIcon = await modalPrompt('Emoji icon (optional)', { placeholder: '📝', maxLength: 4 });
+  if (rawIcon === null) return;
+  const icon = (rawIcon.trim() || '📝').slice(0, 4);
   const tab = { id: 'custom-' + uid(), name, icon };
   settings.customTabs.push(tab);
   saveSettings();
@@ -1196,6 +1392,64 @@ async function updateSyncUI() {
     : 'Share data across browsers and devices — keep the file in OneDrive';
 }
 
+/* ---------- Automatic local snapshots ----------
+   Keeps the last 10 hourly snapshots of all data in this browser, so a
+   sync mishap or accidental clobber is always recoverable via
+   Settings -> Snapshots -> Restore. */
+
+const BACKUP_LIMIT = 10;
+const BACKUP_MIN_INTERVAL = 60 * 60 * 1000; // at most one per hour
+
+async function listBackups() {
+  const all = await idbAll('misc');
+  return all
+    .filter((r) => typeof r.id === 'string' && r.id.startsWith('backup-'))
+    .sort((a, b) => b.savedAt - a.savedAt);
+}
+
+async function maybeBackup() {
+  const backups = await listBackups();
+  if (backups[0] && Date.now() - backups[0].savedAt < BACKUP_MIN_INTERVAL) return;
+  await idbPut('misc', { id: 'backup-' + Date.now(), savedAt: Date.now(), data: snapshotObj() });
+  for (const old of backups.slice(BACKUP_LIMIT - 1)) await idbDelete('misc', old.id);
+  renderBackupList();
+}
+
+async function renderBackupList() {
+  const sel = $('#backup-select');
+  sel.replaceChildren();
+  const backups = await listBackups();
+  if (!backups.length) {
+    const o = document.createElement('option');
+    o.textContent = 'No snapshots yet';
+    o.value = '';
+    sel.append(o);
+    return;
+  }
+  for (const b of backups) {
+    const o = document.createElement('option');
+    o.value = b.id;
+    const d = new Date(b.savedAt);
+    o.textContent = `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} — ${b.data.tasks.length} tasks`;
+    sel.append(o);
+  }
+}
+
+async function restoreBackup() {
+  const id = $('#backup-select').value;
+  if (!id) return;
+  const rec = await idbGet('misc', id);
+  if (!rec || !rec.data) return;
+  const d = new Date(rec.savedAt);
+  if (!confirm(`Restore the snapshot from ${d.toLocaleString()}? Current data will be replaced (a snapshot of it is kept).`)) return;
+  await idbPut('misc', { id: 'backup-' + Date.now(), savedAt: Date.now(), data: snapshotObj() }); // safety net
+  if (await adoptData(rec.data)) {
+    scheduleSync();
+    renderBackupList();
+    toast('Snapshot restored.');
+  }
+}
+
 /* ---------- Live sync between open windows (widget <-> main) ----------
    Windows in the SAME browser share IndexedDB, but each keeps an
    in-memory copy loaded at startup — so a task added in one window
@@ -1346,18 +1600,26 @@ async function init() {
     const val = $('#task-repeat').value;
     const custom = customTab(activeTab);
     const once = val === 'once';
+    // weekday schedule: only meaningful for daily tasks, and only when
+    // a strict subset of days is selected (all 7 = every day = null)
+    let days = null;
+    if (effectiveRecurrence() === 'daily') {
+      const picked = [...document.querySelectorAll('#day-picker .day-chip.active')].map((c) => Number(c.dataset.day));
+      if (picked.length && picked.length < 7) days = picked;
+    }
     const task = {
       id: uid(), title, tab: activeTab,
       recurrence: custom ? (once ? 'daily' : val) : activeTab,
       once, due: (once && $('#task-due').value) || null,
-      done: {}, createdAt: Date.now(),
+      days, done: {}, createdAt: Date.now(),
     };
     tasks.push(task);
     await idbPut('tasks', task);
     input.value = '';
     $('#task-due').value = '';
     $('#task-repeat').value = custom ? 'once' : 'repeat';
-    updateDueVisibility();
+    resetDayPicker();
+    updateFormExtras();
     renderTasks();
   });
 
@@ -1376,7 +1638,11 @@ async function init() {
     renderBacklog();
   });
 
-  $('#task-repeat').addEventListener('change', updateDueVisibility);
+  $('#task-repeat').addEventListener('change', updateFormExtras);
+  $('#day-picker').addEventListener('click', (e) => {
+    const chip = e.target.closest('.day-chip');
+    if (chip) chip.classList.toggle('active');
+  });
 
   wireChipRow('#type-filters', 'type', (v) => { typeFilter = v; renderBacklog(); });
   wireChipRow('#status-filters', 'status', (v) => { statusFilter = v; renderBacklog(); });
@@ -1384,6 +1650,37 @@ async function init() {
   $('#clear-done-tasks').addEventListener('click', clearDoneTasks);
   $('#clear-done-backlog').addEventListener('click', clearDoneBacklog);
   $('#pick-random').addEventListener('click', pickRandomBacklog);
+
+  $('#backlog-search').addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderBacklog();
+  });
+  $('#backlog-sort').addEventListener('change', (e) => {
+    sortMode = e.target.value;
+    renderBacklog();
+  });
+
+  $('#backup-restore').addEventListener('click', restoreBackup);
+  await maybeBackup();
+  await renderBackupList();
+  setInterval(maybeBackup, 15 * 60 * 1000);
+
+  // Keyboard shortcuts: 1-9 switch tabs, N focuses the add box
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) return;
+    if (document.querySelector('.modal-overlay')) return;
+    if (e.key >= '1' && e.key <= '9') {
+      const btns = [...document.querySelectorAll('#tabs .tab')];
+      const btn = btns[Number(e.key) - 1];
+      if (btn) switchTab(btn.dataset.tab);
+    } else if (e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      if (!$('#tasks-panel').hidden) $('#task-input').focus();
+      else if (!$('#backlog-panel').hidden) $('#backlog-input').focus();
+    }
+  });
 
   applySettings();
   $('#tabpos-toggle').addEventListener('click', (e) => {
