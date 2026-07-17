@@ -64,6 +64,7 @@
             <option value="repeat" id="task-repeat-option">🔁 Repeats daily</option>
             <option value="once">📌 One-time</option>
           </select>
+          <input type="date" id="task-due" title="Due date (optional)" hidden>
           <button type="submit" class="btn-primary">Add</button>
         </form>
 
@@ -109,6 +110,11 @@
       <!-- Stats panel -->
       <section id="stats-panel" hidden>
         <div class="stats-grid" id="stats-grid"></div>
+        <p class="stats-caption">Activity — last 6 months</p>
+        <div class="settings-card heatmap-card">
+          <div id="heatmap" class="heatmap"></div>
+          <p class="stat-sub">Weekly and monthly completions are credited to the start of their period.</p>
+        </div>
         <p class="stats-caption">Completions recorded per tab</p>
         <div class="settings-card" id="stats-breakdown"></div>
       </section>
